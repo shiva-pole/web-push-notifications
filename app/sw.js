@@ -20,15 +20,17 @@
 /* eslint-env browser, serviceworker, es6 */
 
 'use strict';
+const applicationServerPublicKey = 'BKuSA3j58trocZicsCnNyYQ1_az6SxrqbI0KzOwimC_9VOAoqWf2HFzR21d6iFOZyV5hQSBzxxikQoE_ZX_lobw';
 
 self.addEventListener('push', function (event) {
     console.log(event);
     console.log('[Service Worker] Push Received.');
-    // console.log(`[Service Worker] Push had this data: "${event.data.text()}"`);
+
     const data = event.data.json();
+    console.log(`[Service Worker] Push had this data: `, data);
     const title = 'HomeUnion';
     const options = {
-        body: `${data.line1} <br/> ${data.line2}`,
+        body: `${data.line1} ${data.line2}`,
         icon: 'images/hu.png',
         badge: 'images/badge.png'
     };
@@ -43,6 +45,22 @@ self.addEventListener('notificationclick', function (event) {
 
     event.waitUntil(
         clients.openWindow('https://developers.google.com/web/')
+    );
+});
+
+
+self.addEventListener('pushsubscriptionchange', function (event) {
+    console.log('[Service Worker]: \'pushsubscriptionchange\' event fired.');
+    const applicationServerKey = urlB64ToUint8Array(applicationServerPublicKey);
+    event.waitUntil(
+        self.registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: applicationServerKey
+        })
+            .then(function (newSubscription) {
+                // TODO: Send to application server
+                console.log('[Service Worker] New subscription: ', newSubscription);
+            })
     );
 });
 

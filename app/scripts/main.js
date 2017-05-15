@@ -1,7 +1,8 @@
 
-// const applicationServerPublicKey = 'BKuSA3j58trocZicsCnNyYQ1_az6SxrqbI0KzOwimC_9VOAoqWf2HFzR21d6iFOZyV5hQSBzxxikQoE_ZX_lobw';
-const applicationServerPublicKey = 'BNGgaJ6W3OZNNC7pQGTiY7BuZaXBbp6bUTGp3M646KaViR74Kf9NjXPKWuhmdHKRNmvCdLWwU3Um3dwGJVnr3ys';
+const applicationServerPublicKey = 'BKuSA3j58trocZicsCnNyYQ1_az6SxrqbI0KzOwimC_9VOAoqWf2HFzR21d6iFOZyV5hQSBzxxikQoE_ZX_lobw';
 const applicationServerKey = urlB64ToUint8Array(applicationServerPublicKey);
+const pushEnableButton = document.querySelector('.js-push-btn');
+let isSubscribed = false;
 
 function urlB64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
@@ -67,17 +68,15 @@ function initialiseState(registration) {
             // a subscription to push notifications
             if (!subscription) {
                 subscribe();
-
                 return;
             }
-
+            isSubscribed = true;
             // Update the server state with the new subscription
-            sendSubscriptionToServer(subscription);
-        })
-            .catch(function (err) {
-                // Handle the error - show a notification in the GUI
-                console.warn('Error during getSubscription()', err);
-            });
+            sendSubscriptionToServer(subscription, true);
+        }).catch(function (err) {
+            // Handle the error - show a notification in the GUI
+            console.warn('Error during getSubscription()', err);
+        });
     });
 }
 
@@ -100,9 +99,10 @@ function subscribe() {
             userVisibleOnly: true,
             applicationServerKey: applicationServerKey
         }).then(function (subscription) {
-
+            console.log('Subscription successful');
+            console.log('Subscription', subscription);
             // Update the server state with the new subscription
-            return sendSubscriptionToServer(subscription);
+            return sendSubscriptionToServer(subscription, true);
         })
             .catch(function (e) {
                 if (Notification.permission === 'denied') {
@@ -117,15 +117,23 @@ function subscribe() {
 /**
  * Step four: Send the generated subscription object to our server.
  */
-function sendSubscriptionToServer(subscription) {
+function sendSubscriptionToServer(subscription, subscribe) {
 
     // Get public key and user auth from the subscription object
     var key = subscription.getKey ? subscription.getKey('p256dh') : '';
     var auth = subscription.getKey ? subscription.getKey('auth') : '';
-
+    if (subscribe) {
+        // pushEnableButton.disabled = false;
+        isSubscribed = true;
+        pushEnableButton.textContent = 'Disable Push';
+    } else {
+        // pushEnableButton.disabled = true;
+        isSubscribed = false;
+        pushEnableButton.textContent = 'Enable Push';
+    }
     // This example uses the new fetch API. This is not supported in all
     // browsers yet.
-    return fetch('http://localhost:8081/profile/subscription', {
+    return fetch('http://localhost:8081/save-subscription', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -135,37 +143,57 @@ function sendSubscriptionToServer(subscription) {
             // Take byte[] and turn it into a base64 encoded string suitable for
             // POSTing to a server over HTTP
             key: key ? btoa(String.fromCharCode.apply(null, new Uint8Array(key))) : '',
-            auth: auth ? btoa(String.fromCharCode.apply(null, new Uint8Array(auth))) : ''
+            auth: auth ? btoa(String.fromCharCode.apply(null, new Uint8Array(auth))) : '',
+            subscribe: subscribe
         })
     });
 }
 
+//Unsubscribe
 
-// After this code has been run successfully, the following JSON will be POSTed to your server:
+function unsubscribe() {
+    navigator.serviceWorker.ready.then(function (serviceWorkerRegistration) {
+        serviceWorkerRegistration.pushManager.getSubscription().then(function (subscription) {
+            subscription.unsubscribe().then(function (successful) {
+                return sendSubscriptionToServer(subscription, false);
+            }).catch(function (e) {
+                // Unsubscription failed
+                console.log('Unsubscription failed');
+            })
+        })
+    });
+}
 
-// {
-//     "endpoint": "https://push.server.mozilla.org/unique-endpoint",
-//         "key": "TmljZSB0cnksIG5vIGtleSBmb3IgeW91IQ==",
-//             "auth": "Tm8hIEJhZCBoYWNrZXIh"
-// }
+pushEnableButton.addEventListener('click', function () {
+    // pushEnableButton.disabled = true;
+    if (isSubscribed) {
+        unsubscribe();
+    } else {
+        subscribe();
+    }
+});
+
 
 //Push messages
 const pushButton = document.querySelector('.push-msg-btn');
 pushButton.addEventListener('click', function () {
     //mozilla test body
     // var data = {
-    //     "endpoint": "https://updates.push.services.mozilla.com/wpush/v2/gAAAAABY9MYRHFhZEFMHuxNDCcC4g4jRCTNRcyFQcQNNWh45XEDMgQmEHyebie583oPSstSBCVjycAjIz1TuEeNA1EMluai1jMS5RKo-u_borgrrSnkFgN-tP0Bh8K-BK8QAg9jqx28acmalNHBCRWDaMoZBcEhoI06g_r1nenkQWNG5-YeMHSw",
-    //     "key": "BEkVxNXLMW3MEgCBACHQsRJZfacOFn7/6pHEx6IR941+VjeDRmxd40JCi0pxx2qy5fXkz4GZO5046diLvDu/U/M=",
-    //     "auth": "pOFybkQ2wQWmau9b8xrSfw==",
-    //     "payLoad": "{\"line1\":\"You have a new notification..\",\"line2\":\"View more info\"}"
+    //     "endpoint": "https://updates.push.services.mozilla.com/wpush/v2/gAAAAABZGX6GUvn7ZFgnUdXZUqGOCBDAM2R56k_-9oQIDwlUinl3j0OXxIbZBsr9_SMrpXd7_i1ZRXc1DgPRiOSI8yUlyGVZWC9gaR5YafBbKf5cM829Yg7lSTkxwXvZbTdCmkfrhwTTprii8YVtmryZN9cZqoJU0NccWqgMPRj0HLUau-tsdL8",
+    //     "key": "BLs2ctmUoAjQYBxuHzyrV1mLQHYM6ARV6ZFIf5iFHp3Rks8nTkO/wYpdf0caiyGR7BPaRht/c5z5P5ZxdxBAnZQ=",
+    //     "auth": "llStJALQuUdR/OBfN+AOTw==",
+    //     "payLoad": "{\"line1\":\"You have a new notification..\",\"line2\":\"View more info here\"}"
     // }
+
     //chrome test body
     var data = {
-        "endpoint": "https://fcm.googleapis.com/fcm/send/f52sSaZ-mN4:APA91bFQIHo7ynzBqewUXPyXIS_XVeQuMctPUlToh8QzljFMohd2w4TPyjsND_2IUvw5-lViHHl0msdzAFD0dwFgXXa8y1AeQ1h9geR8z7Brvxmv4vpU3Yv2FXoH8nSLd6NaaZ8Kj__G",
-        "key": "BJFYnnRt4a46VeWwbUy65o6oHj8oSY43lOHoe3LDB6eM043Pe9NtDUuLydQ60k+/SwWm2HvYZRndvCjzrC9Jt0g=",
-        "auth": "Hd6HN5zXWw1zfDeE/b3Pmg==",
-        "payLoad": "{\"line1\":\"You have a new notification..\",\"line2\":\"View more info\"}"
-    }
+        "endpoint": "https://fcm.googleapis.com/fcm/send/cRmtbuWnwus:APA91bFHEPbRGo3aBqGyMUwV5fYJokG2WkOlgtOwv3sHfevFraoYcaQ_pTHz4Ok-eVKmHfdNYlJBgyd8PQ9vxFlx6kg-QgLL8SRmqpzsCaGHc5Vh2fJtToKWCa1tX4Qmm2SPn9T5yCXP",
+        "key": "BHyKPWhqt7zveVcY8v+EeNrW0iRRrvDa9CO+bP/w4ull9C4wHjBHGVnYmRJZ99/wEKvGiLSYBqePq1UXjo0DWyM=",
+        "auth": "pM2BbUnMnZL6v7pLN9IuxQ==",
+        "payLoad": "{\"line1\":\"You have a new notification..\",\"line2\":\"View more info here\"}"
+    };
+
+
 
     return fetch('http://localhost:8081/send-notification', {
         method: 'POST',
